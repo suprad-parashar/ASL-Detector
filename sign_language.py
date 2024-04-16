@@ -24,28 +24,40 @@ class SignLanguageDataset(Dataset):
         return self.X[idx].reshape(1, 28, 28), self.y[idx]
     
 class SignLanguageModel(nn.Module):
-    def __init__(self):
+    def __init__(self,channels=None, dropout_rate=0.5, kernel_size=3, stride=1, padding=1):
         super(SignLanguageModel, self).__init__()
-        self.channels = [1, 4, 16]
-        self.cnns = nn.ModuleList([self.get_cnn_layer(self.channels[i], self.channels[i+1], 3, 1, 1) for i in range(len(self.channels)-1)])
+        if channels is None:
+            self.channels = [1, 4, 16]
+        self.channels = channels
+        self.dropout_rate = dropout_rate
+
+        self.cnns = nn.ModuleList()
+        for i in range(len(self.channels) - 1):
+            self.cnns.append(self.get_cnn_layer(self.channels[i], self.channels[i+1], kernel_size, stride, padding))
+        
+        # Fully connected layers
         self.fc = nn.Sequential(
-            nn.Linear(7 * 7 * 16, 64),
-            nn.Linear(64, 26)
+            nn.Linear(7 * 7 * self.channels[-1], 64),  
+            nn.Dropout(dropout_rate),
+            nn.Linear(64, 26) 
         )
+        
     
     def get_cnn_layer(self, in_channels, out_channels, kernel_size, stride, padding):
         return nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
+            nn.ReLU(),
             nn.Conv2d(out_channels, out_channels, kernel_size, stride, padding),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2)
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout(self.dropout_rate)
         )
         
     def forward(self, x):
         for cnn in self.cnns:
             x = cnn(x)
-        x = x.reshape(x.shape[0], -1)
+        x = x.reshape(x.shape[0], -1) # flatten the output of the last CNN layer
         x = self.fc(x)
         return x
     
